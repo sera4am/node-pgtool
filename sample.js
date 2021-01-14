@@ -33,16 +33,6 @@ const DB = require('./db');
 			console.log(e);
 		})
 
-	/*
-
-	await db.first({text: 'SELECT * FROM m_user'} )
-		.then(ret => {
-			console.log(ret);
-		})
-		.catch(e => {
-			console.log(e);
-		});
-	 */
 	db.close();
 	console.timeEnd('Access time');
 })();
