@@ -1,0 +1,25 @@
+{
+  "name": "node-pgtool",
+  "version": "1.0.0",
+  "description": "Client tool of the postgresql for NodeJS",
+  "main": "db.js",
+  "private": true,
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sera4am/node-pgtool.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/sera4am/node-pgtool/issues"
+  },
+  "homepage": "https://github.com/sera4am/node-pgtool#readme",
+  "dependencies": {
+    "config": "^3.3.3",
+    "fs": "^0.0.1-security",
+    "install": "^0.13.0",
+    "pg": "^8.5.1",
+    "pg-cursor": "^2.5.2"
+  }
+}
