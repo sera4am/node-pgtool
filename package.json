@@ -1,9 +1,8 @@
 {
   "name": "node-pgtool",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Client tool of the postgresql for NodeJS",
   "main": "db.js",
-  "private": true,
   "scripts": {},
   "repository": {
     "type": "git",
