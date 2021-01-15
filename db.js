@@ -1,13 +1,13 @@
-const config = require('config');
 const { Pool } = require('pg');
 const Cursor = require('pg-cursor');
 
 module.exports = class {
 
-	constructor(option = null) {
-		if (!option) {
-			option = config.database;
-		}
+	debug = false;
+
+	constructor(option) {
+		this.debug = option.debug || false;
+		delete option.debug;
 		this.pool = new Pool(option);
 	}
 
@@ -42,6 +42,9 @@ module.exports = class {
 			if (!client) {
 				return reject('Client not defined');
 			}
+			if (this.debug) {
+				console.log('[DB]', 'Begin');
+			}
 			await client.query('BEGIN')
 				.then(() => {
 					resolve();
@@ -60,6 +63,9 @@ module.exports = class {
 			if (typeof  client !== 'object') {
 				return reject('Invalid argument', typeof client);
 			}
+			if (this.debug) {
+				console.log('[DB]', 'commit');
+			}
 			await client.query('COMMIT')
 				.then(() => {
 					resolve();
@@ -74,6 +80,9 @@ module.exports = class {
 		return new Promise(async (resolve, reject) => {
 			if (!client) {
 				return reject('Client not defined');
+			}
+			if (this.debug) {
+				console.log('[DB]', 'rollback');
 			}
 			await client.query('ROLLBACK')
 				.then(() => {
@@ -94,12 +103,16 @@ module.exports = class {
 						.catch(e => { throw e});
 					isClientCreated = true;
 				}
-				console.log('[Query]', options);
+				if (this.debug) {
+					console.log('[Query]', options);
+				}
 				await client.query(options)
 					.then(ret => {
 						resolve({rows:ret.rows});
 					})
-					.catch(e => { throw e});
+					.catch(e => {
+						throw new Error(e.message);
+					});
 			} catch(e) {
 				reject(e);
 			} finally {
@@ -124,7 +137,9 @@ module.exports = class {
 				let cursor = client.query(new Cursor(text, values, options));
 				cursor.read(1, (err, rows) => {
 					cursor.close(() => {
-						if (rows.length > 0) {
+						if  (err) {
+							reject(new Error(err.message));
+						} else if (rows && rows.length > 0) {
 							resolve(rows[0]);
 						} else {
 							resolve(null);
@@ -143,11 +158,14 @@ module.exports = class {
 		return new Promise(async (resolve, reject) => {
 			options.rowMode = 'array';
 			try {
+				if (this.debug) {
+					console.log('[DB]', 'one', options);
+				}
 				await this.first(options, client)
 					.then(ret => {
 						resolve(ret[0]);
 					})
-					.catch(e => { throw e});
+					.catch(e => { throw new Error(e.message)});
 			} catch(e) {
 				reject(e);
 			}
@@ -156,6 +174,7 @@ module.exports = class {
 
 	insert = ((model, data, client = null, tableName = null, idColumn = 'id', returnId = true) => {
 		return new Promise(async (resolve, reject) => {
+
 			let isClientCreated = false;
 			try {
 				let result = true;
@@ -166,13 +185,16 @@ module.exports = class {
 					tableName = model.table_name;
 				}
 
+				if (!model.columns) {
+					return reject(new Error('model columns not defined.'));
+				}
 				for (const [key, item] of Object.entries(model.columns)) {
 					if (item.no_insert) { continue }
 					if (item.type.toLowerCase() === 'foreign') { continue }
 
 					if (data[key] === undefined || data[key] === null) {
 						if (item.not_null && (item.default === undefined || item.default === null)) {
-							return reject(`${tableName}:${key} is required`);
+							reject(new Error(`${tableName}:${key} is required`));
 						}
 						if (item.default === undefined) {
 							data[key] = null;
@@ -216,7 +238,7 @@ module.exports = class {
 								let lat = parseFloat(data[key][0]);
 								let lng = parseFloat(data[key][1]);
 								if (!lat || !lng) {
-									throw new Error(`Invalid geo string: ${data[key].join(',')} at [${key}]`);
+									return reject(new Error(`Invalid geo string: ${data[key].join(',')} at [${key}]`));
 								}
 								questions.push(`ST_SetSRID(ST_MakePoint(${lng},${lat}),${srid})`);
 							}
@@ -230,7 +252,7 @@ module.exports = class {
 									let lat = parseFloat(coord[0]);
 									let lng = parseFloat(coord[1]);
 									if (!lat || !lng) {
-										throw new Error(`Invalid geo string: ${data[key].join(',')} at [${key}]`);
+										return reject(new Error(`Invalid geo string: ${data[key].join(',')} at [${key}]`));
 									}
 									coords.push(`ST_MakePoint(${lng},${lat})`);
 								}
@@ -249,7 +271,9 @@ module.exports = class {
 				}
 
 				let sql = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${questions.join(', ')})`;
-				console.log('[Insert]', sql, values);
+				if (this.debug) {
+					console.log('[DB]', 'Insert', sql, values);
+				}
 				if (returnId) {
 					sql += ` RETURNING ${idColumn}`;
 				}
@@ -258,7 +282,10 @@ module.exports = class {
 					isClientCreated = true;
 				}
 
-				let res = await client.query({text: sql, values: values, rowMode: 'array'});
+				let res = await client.query({text: sql, values: values, rowMode: 'array'})
+					.catch(e => {
+						throw new Error(e.message);
+					});
 				result = true;
 				if (returnId) {
 					if (res && res.rows && res.rows[0]) {
@@ -293,7 +320,7 @@ module.exports = class {
 
 					if (data[key] === undefined || data[key] === null) {
 						if (item.not_null && (item.default === undefined || item.default === null)) {
-							return reject(`${tableName}:${key} is required`);
+							return reject(new Error(`${tableName}:${key} is required`));
 						}
 						if (item.default === undefined) {
 							data[key] = null;
@@ -325,7 +352,7 @@ module.exports = class {
 								let lat = parseFloat(data[key][0]);
 								let lng = parseFloat(data[key][1]);
 								if (!lat || !lng) {
-									throw new Error(`Invalid geo parameter: ${data[key].join(',')} at [${key}`);
+									return reject(new Error(`Invalid geo parameter: ${data[key].join(',')} at [${key}`));
 								}
 								updates.push(`${key} = ST_SetSRID(ST_MakePoint(${lng},${lat}), ${srid})`);
 							}
@@ -339,7 +366,7 @@ module.exports = class {
 									let lat = parseFloat(coord[0]);
 									let lng = parseFloat(coord[1]);
 									if (!lat || !lng) {
-										throw new Error(`Invalid geo parameter: ${coord.join(',')} at [${key}]`);
+										return reject(new Error(`Invalid geo parameter: ${coord.join(',')} at [${key}]`));
 									}
 									coords.push(`ST_MakePoint(${lng},${lat})`);
 								}
@@ -358,15 +385,16 @@ module.exports = class {
 
 				values.push(data[idColumn]);
 				let sql = `UPDATE ${tableName} SET ${updates.join(',')} WHERE ${idColumn} = $${values.length}`;
-				console.log('[DB]', 'Update', sql, values);
-
+				if (this.debug) {
+					console.log('[DB]', 'Update', sql, values);
+				}
 				if (!client) {
 					client = await this.client(true);
 					isClientCreated = true;
 				}
 
 				await client.query({text: sql, values: values, rowMode: 'array'})
-					.catch(e => { throw e});
+					.catch(e => { throw new Error(e.message)});
 				isClientCreated && await this.commit(client).catch(e => { throw e});
 				resolve();
 			} catch(e) {
